@@ -358,6 +358,96 @@ open class CandleStickChartRenderer: LineScatterCandleRadarRenderer
                 }
             }
         }
+        
+        //TODO:新增绘制最大值最小值
+        var dataSets = candleData.dataSets
+        
+        let phaseY = animator.phaseY
+        
+        for i in 0 ..< dataSets.count {
+            
+            guard let dataSet = dataSets[i] as? ICandleChartDataSet , dataSets.count > 0
+                else { continue }
+            
+            let valueFont = dataSet.valueFont
+            
+            guard let formatter = dataSet.valueFormatter else
+            { continue }
+            
+            let trans = dataProvider.getTransformer(forAxis: dataSet.axisDependency)
+            
+            let valueToPixelMatrix = trans.valueToPixelMatrix
+            
+            _xBounds.set(chart: dataProvider, dataSet: dataSet, animator: animator)
+            
+            let lineHeight = valueFont.lineHeight
+            
+            let yOffset:CGFloat = lineHeight
+            
+            //找出所有画布内的点
+            var values = [CandleChartDataEntry]()
+            
+            for j in stride(from: _xBounds.min, to: _xBounds.range + _xBounds.min, by: 1){
+                guard let e = dataSet.entryForIndex(j) as? CandleChartDataEntry else { break }
+                
+                var pt = CGPoint()
+                pt.x = CGFloat(e.x)
+                pt.y = CGFloat(e.high * phaseY)
+                pt = pt.applying(valueToPixelMatrix)
+                if (!viewPortHandler.isInBoundsRight(pt.x)){
+                    break
+                }
+                if (!viewPortHandler.isInBoundsLeft(pt.x) || !viewPortHandler.isInBoundsY(pt.y)){
+                    continue
+                }
+                values.append(e)
+            }
+            
+            guard values.count > 0 else { continue }
+            
+            //计算最大值和最小值
+            var maxEntry = values[0]
+            var minEntry = values[0]
+            for entry in values {
+                if entry.high > maxEntry.high {
+                    maxEntry = entry
+                }
+                if entry.low < minEntry.low {
+                    minEntry = entry
+                }
+            }
+            
+            var maxPt = CGPoint(x: maxEntry.x, y: maxEntry.high)
+            maxPt = maxPt.applying(valueToPixelMatrix)
+            var minPt = CGPoint(x: minEntry.x, y: minEntry.low)
+            minPt = minPt.applying(valueToPixelMatrix)
+            
+            if (maxPt.x > minPt.x){
+                //大值画左向，小值画右向
+                
+                var maxTest = formatter.stringForValue(maxEntry.high, entry: maxEntry, dataSetIndex: i, viewPortHandler: viewPortHandler)
+                maxTest = "\(maxTest) →"
+                
+                let maxPoint = CGPoint(x: maxPt.x, y: maxPt.y - yOffset)
+                ChartUtils.drawText(context: context, text: maxTest, point: maxPoint, align: .right, attributes: [NSAttributedString.Key.font:valueFont,NSAttributedString.Key.foregroundColor:dataSet.valueTextColorAt(Int(maxEntry.x))])
+                
+                var minTest = formatter.stringForValue(minEntry.low, entry: minEntry, dataSetIndex: i, viewPortHandler: viewPortHandler)
+                minTest = "← \(minTest)"
+                let minPoint = CGPoint(x: minPt.x, y: minPt.y)
+                ChartUtils.drawText(context: context, text: minTest, point: minPoint, align: .left, attributes: [NSAttributedString.Key.font:valueFont,NSAttributedString.Key.foregroundColor:dataSet.valueTextColorAt(Int(minEntry.x))])
+            }else{
+                //大值画右向，小值画左向
+                var maxTest = formatter.stringForValue(maxEntry.high, entry: maxEntry, dataSetIndex: i, viewPortHandler: viewPortHandler)
+                maxTest = "← \(maxTest)"
+                let maxPoint = CGPoint(x: maxPt.x, y: maxPt.y - yOffset)
+                ChartUtils.drawText(context: context, text: maxTest, point: maxPoint, align: .left, attributes: [NSAttributedString.Key.font:valueFont,NSAttributedString.Key.foregroundColor:dataSet.valueTextColor])
+                
+                var minTest = formatter.stringForValue(minEntry.low, entry: minEntry, dataSetIndex: i, viewPortHandler: viewPortHandler)
+                minTest = "\(minTest) →"
+                let minPoint = CGPoint(x: minPt.x, y: minPt.y)
+                ChartUtils.drawText(context: context, text: minTest, point: minPoint, align: .right, attributes: [NSAttributedString.Key.font:valueFont,NSAttributedString.Key.foregroundColor:dataSet.valueTextColorAt(Int(minEntry.x))])
+            }
+        }
     }
     
     open override func drawExtras(context: CGContext)
@@ -401,9 +491,14 @@ open class CandleStickChartRenderer: LineScatterCandleRadarRenderer
                 context.setLineDash(phase: 0.0, lengths: [])
             }
             
-            let lowValue = e.low * Double(animator.phaseY)
-            let highValue = e.high * Double(animator.phaseY)
-            let y = (lowValue + highValue) / 2.0
+            //TODO:修改高亮原点为收盘价
+            //remove
+//            let lowValue = e.low * Double(animator.phaseY)
+//            let highValue = e.high * Double(animator.phaseY)
+//            let y = (lowValue + highValue) / 2.0
+            //Start
+            let y = e.close
+            //End
             
             let pt = trans.pixelForValues(x: e.x, y: y)
             
